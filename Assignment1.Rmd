@@ -1,0 +1,374 @@
+  
+---
+title: "Assignment 1 R Notebook"
+author: "Bihan Zhu"
+output: html_document
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Prepare packages and installation
+```{r, message=FALSE}
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+  
+if (! requireNamespace("Biobase", quietly = TRUE)) {
+  BiocManager::install("Biobase")
+}
+
+if (! requireNamespace("GEOquery", quietly = TRUE)) {
+  BiocManager::install("GEOquery")
+}
+
+if (!requireNamespace("edgeR", quietly = TRUE))
+  BiocManager::install("edgeR")
+
+library(BiocManager)
+library(Biobase)
+library(GEOquery)
+library(edgeR)
+library(knitr)
+library(biomaRt)
+library(dplyr)
+
+```
+
+### Download my chosen expression dataset from GEO (GSE139242)
+- GSE139242 
+- Transcriptome profiling of human thymic and peripheral blood CD4 + and CD8+ T cells, using RNA-seq
+```{r, message=FALSE}
+
+gse <- getGEO("GSE139242",GSEMatrix=FALSE)
+```
+
+```{r}
+kable(data.frame(head(Meta(gse))), format = "html")
+```
+
+
+```{r}
+current_gpl <- names(GPLList(gse))[1]
+current_gpl_info <- Meta(getGEO(current_gpl))
+
+current_gpl_info$title
+current_gpl_info$last_update_date
+current_gpl_info$organism
+
+```
+
+
+
+### Get the expression data from supplementary files 
+
+```{r}
+
+sfiles = getGEOSuppFiles('GSE139242')
+# There are two files in total, and I am using the second one
+(fnames = rownames(sfiles))
+ 
+```
+
+
+
+### Expression data 
+```{r}
+Tcell_expr = read.csv(fnames[2],header=TRUE,check.names = FALSE)
+ncol(Tcell_expr)
+colnames(Tcell_expr)
+nrow(Tcell_expr)
+
+# Check how the data looks like
+kable(Tcell_expr[1:15,1:10], format = "html")
+
+```
+
+
+### Define the groups:
+```{r}
+
+# How many genes do we have mesurments for
+dim(Tcell_expr)
+
+samples <- data.frame(lapply(colnames(Tcell_expr)[2:19], 
+                             FUN=function(x){unlist(strsplit(x, split = "\\_"))[c(1:3)]}))
+colnames(samples) <- colnames(Tcell_expr)[2:19]
+rownames(samples) <- c("celltype","tissue","patient")
+samples <- data.frame(t(samples))
+kable(samples, format = "html")
+
+```
+
+
+### Translate out counts into counts per million using the edgeR package function cpm
+
+```{r}
+cpms = cpm(Tcell_expr[,2:19])
+rownames(cpms) <- Tcell_expr[,1]
+
+# get rid of low counts
+keep = rowSums(cpms >1) >=3
+Tcell_expr_filtered = Tcell_expr[keep,]
+
+dim(Tcell_expr_filtered)
+```
+
+
+### Normalization using TMM
+
+```{r}
+filtered_data_matrix <- as.matrix(Tcell_expr_filtered[,2:19])
+rownames(filtered_data_matrix) <- Tcell_expr_filtered$Geneid
+d = DGEList(counts=filtered_data_matrix, group=samples$cell_type)
+# Calculate the normalization factors
+d = calcNormFactors(d)
+
+normalized_counts <- cpm(d)
+
+```
+
+
+### Boxplot before Normalization
+```{r,message=FALSE,warning=FALSE}
+data2plot <- log2(cpm(Tcell_expr_filtered[,2:19]))
+boxplot(data2plot, xlab = "Samples", ylab = "log2 CPM", 
+        las = 2, cex = 0.5, cex.lab = 0.5,
+        cex.axis = 0.5, main = "CA125 RNASeq Samples")
+#draw the median on each box plot
+abline(h = median(apply(data2plot, 2, median)), col = "green", lwd = 0.6, lty = "dashed")
+
+```
+
+### Boxplot after normalization
+```{r,message=FALSE,warning=FALSE}
+data2plot <- log2(normalized_counts)
+boxplot(data2plot, xlab = "Samples", ylab = "log2 CPM", 
+        las = 2, cex = 0.5, cex.lab = 0.5,
+        cex.axis = 0.5, main = "CA125 RNASeq Samples")
+#draw the median on each box plot
+abline(h = median(apply(data2plot, 2, median)), col = "green", lwd = 0.6, lty = "dashed")
+
+```
+
+
+### Density plot before Normalization
+```{r}
+counts_density <- apply(log2(cpm(Tcell_expr_filtered[,2:19])), 2, density)
+  #calculate the limits across all the samples
+    xlim <- 0; ylim <- 0
+    for (i in 1:length(counts_density)) {
+      xlim <- range(c(xlim, counts_density[[i]]$x)); 
+      ylim <- range(c(ylim, counts_density[[i]]$y))
+    }
+    cols <- rainbow(length(counts_density))
+    ltys <- rep(1, length(counts_density))
+    #plot the first density plot to initialize the plot
+    plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n", 
+         ylab="Smoothing density of log2-CPM", main="", cex.lab = 0.85)
+    #plot each line
+    for (i in 1:length(counts_density)) lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+    #create legend
+    legend("topright", colnames(data2plot),  
+           col=cols, lty=ltys, cex=0.75, 
+           border ="blue",  text.col = "green4", 
+           merge = TRUE, bg = "gray90")
+
+```
+
+### Density plot after Normalization
+```{r}
+counts_density <- apply(log2(normalized_counts), 2, density)
+  #calculate the limits across all the samples
+    xlim <- 0; ylim <- 0
+    for (i in 1:length(counts_density)) {
+      xlim <- range(c(xlim, counts_density[[i]]$x)); 
+      ylim <- range(c(ylim, counts_density[[i]]$y))
+    }
+    cols <- rainbow(length(counts_density))
+    ltys <- rep(1, length(counts_density))
+    #plot the first density plot to initialize the plot
+    plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n", 
+         ylab="Smoothing density of log2-CPM", main="", cex.lab = 0.85)
+    #plot each line
+    for (i in 1:length(counts_density)) lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+    #create legend
+    legend("topright", colnames(data2plot),  
+           col=cols, lty=ltys, cex=0.75, 
+           border ="blue",  text.col = "green4", 
+           merge = TRUE, bg = "gray90")
+
+```
+
+### M vs A plot
+```{r}
+
+colnames(Tcell_expr)
+
+plotMA(log2(Tcell_expr[,c(2,11)]), ylab="M - ratio log expression", main="CD4 vs CD8 on thymus_1 - example")
+```
+
+
+```{r}
+
+plotMA(log2(Tcell_expr[,c(6,16)]), ylab="M - ratio log expression", main="CD4 vs CD8 on bloodinfant_1 - example")
+
+```
+
+
+### MDS plot represents the distances between samples
+
+```{r}
+# Colored based on different tissues
+plotMDS(d, labels=rownames(samples),
+  col = c("darkgreen","blue","orange")[factor(samples$tissue)])
+```
+
+```{r}
+# Colored based on patients
+plotMDS(d, labels=rownames(samples),
+  col = c("darkgreen","blue","orange")[factor(samples$patient)])
+```
+
+
+```{r}
+# Colored based on cell types (CD4 or CD8)
+plotMDS(d, labels=rownames(samples),
+  col = c("darkgreen","blue","orange")[factor(samples$celltype)])
+```
+
+### Graphing the BCV
+```{r}
+model_design <- model.matrix(~samples$tissue + samples$celltype +0)
+d <- estimateDisp(d, model_design)
+
+plotBCV(d,col.tagwise = "black",col.common = "red")
+```
+
+### Create a visual representation of the mean-variance relationship
+```{r}
+plotMeanVar(d, show.raw.vars = TRUE,
+            show.tagwise.vars=FALSE, 
+            NBline=FALSE, 
+            show.ave.raw.vars = FALSE,show.binned.common.disp.vars = FALSE)
+```
+
+### show.tagwise.vars=TRUE
+```{r}
+plotMeanVar(d, show.raw.vars = TRUE,
+            show.tagwise.vars=TRUE,
+            NBline=FALSE, 
+            show.ave.raw.vars = FALSE,
+            show.binned.common.disp.vars = FALSE)
+```
+
+### show.ave.raw.vars = TRUE
+```{r}
+plotMeanVar(d, show.raw.vars = TRUE, 
+            show.tagwise.vars=TRUE, 
+            show.ave.raw.vars = TRUE,
+            NBline=FALSE, 
+            show.binned.common.disp.vars = FALSE)
+```
+
+### NBline=TRUE
+```{r}
+plotMeanVar(d, show.raw.vars = TRUE, 
+            show.tagwise.vars=TRUE, 
+            show.ave.raw.vars = TRUE,  
+            NBline=TRUE,
+            show.binned.common.disp.vars = TRUE)
+```
+
+
+### Identifier Mapping using biomaRt
+```{r, eval=FALSE}
+
+library(biomaRt)
+listMarts()
+
+ensembl <- useMart("ensembl")
+mart <- biomaRt::useEnsembl(biomart = "ensembl",
+                            dataset = "hsapiens_gene_ensembl",
+                            mirror = "useast")
+
+
+datasets <- listDatasets(ensembl)
+kable(head(datasets),format = "html")
+
+```
+
+### getBM method from biomaRt
+```{r}
+
+conversion_stash <- "gene_id_conversion.rds"
+if(file.exists(conversion_stash)){
+ id_conversion <- readRDS(conversion_stash)
+} else {
+  id_conversion <- getBM(attributes = c("ensembl_gene_id","hgnc_symbol"),
+                            filters = c("ensembl_gene_id"),
+                            values = Tcell_expr_filtered$Geneid,
+                            mart = mart)
+  saveRDS(id_conversion, conversion_stash)
+}
+
+```
+
+
+### Difference between the number of mappings and the number of rows in the dataset
+```{r}
+nrow(normalized_counts) - nrow(id_conversion)
+```
+
+### Merge our new identifiers
+```{r}
+normalized_counts_annot <- merge(id_conversion,normalized_counts,by.x = 1, by.y = 0, all.y=TRUE)
+kable(normalized_counts_annot[1:5,1:5],type = "html")
+```
+
+
+```{r, message=FALSE}
+# Number of identifiers are missing
+ensembl_id_missing_gene <- normalized_counts_annot$ensembl_gene_id[
+  which(is.na(normalized_counts_annot$hgnc_symbol))]
+
+length(ensembl_id_missing_gene)
+# [1] 177
+
+normalized_counts_annot_filtered <-normalized_counts_annot[!is.na(normalized_counts_annot$hgnc_symbol),]
+#This is the number of rows before we filtered out the unmapped genes
+nrow(normalized_counts_annot)
+#This is the number of rows after we filtered out the unmapped genes
+nrow(normalized_counts_annot_filtered)
+```
+
+**What are the control and test conditions of the dataset?**
+The samples of this study are collected based on three categories, The sample tissue: infant thymus/infant blood/adult blood, the cell type: CD4/CD8 and each type is composed of 3-5 samples.
+
+The study was looking for the T cell differentiation in the thymus through the early age development, therefore the control is the sample collected from infant and adult blood and test is the samples collected from infant thymus.
+
+
+**Why is the dataset of interest to you?**
+I am interested in immunology, in this study, they were tring to figure out the differentiate mechanism of the CD4 (cluster of differentiation 4) positive cell and CD8 positive cell in infant thymus tissues. Those types of T cells were kind of popular during the early year of immunology studies.
+
+
+**Were there expression values that were not unique for specific genes? How did you handle these?**
+No, not in my dataset.
+
+**Were there expression values that could not be mapped to current HUGO symbols?**
+yes, there are in total 177 ensembl_id missing genes
+
+**How many outliers were removed?**
+dim(Tcell_expr_filtered) 16382 rows and the original dim(Tcell_expr) composed of 65217 rows, there were 48835 not significantly expressed genes were removed.
+
+
+**How did you handle replicates?**
+all replicates are kept for value concern.
+
+**What is the final coverage of your dataset?**
+
+
+`r nrow(normalized_counts_annot_filtered)`
