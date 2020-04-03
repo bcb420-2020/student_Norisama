@@ -1,0 +1,166 @@
+---
+title: "Assignment3"
+author: "Bihan Zhu"
+date: "03/31/2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 5
+bibliography: A3.bib
+
+---
+
+  
+---
+title: "Assignment 3"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+---
+***
+
+
+
+```{r child='A2_BihanZhu.Rmd', include=FALSE, eval=TRUE, cache=TRUE}
+
+```
+
+### A3: Non-thresholded Gene Set Enrichment Analysis (GSEA)
+
+
+##### Compute ranks and generate .rnk file
+
+```{r data prepare for A3,echo=FALSE, eval=TRUE,include=FALSE}
+qlf_output_hits$tables
+
+
+
+qlf_output_hits_merge <- merge(normalized_count_data[,c(1,2)],qlf_output_hits, by.x=0, by.y = 0)
+
+qlf_output_hits_merge[,"rank"] <- -log(qlf_output_hits_merge$PValue,base =10) * sign(qlf_output_hits_merge$logFC)
+
+qlf_output_hits_merge <- qlf_output_hits_merge[order(qlf_output_hits_merge$rank,decreasing = TRUE),]
+
+ranked_result <- as.data.frame(qlf_output_hits_merge[which(qlf_output_hits_merge$PValue < 0.05),][,c("hgnc_symbol","rank")])
+dim(ranked_result)
+
+ranked_result <- ranked_result[which(ranked_result$hgnc_symbol != ""),]
+
+dim(ranked_result)
+
+# write.table(ranked_result,file = "ranks.rnk", sep = "\t",
+#             row.names = FALSE,col.names = FALSE,quote = FALSE)
+
+
+```
+
+<!-- output -->
+<!-- file:///Users/ghome/gsea_home/output/apr02/gene_analysis.GseaPreranked.1585886479094/index.html -->
+<!-- report -->
+<!-- file:///Users/ghome/gsea_home/output/apr02/gene_analysis.GseaPreranked.1585886479094/gsea_report_for_na_pos_1585886479094.html -->
+<!-- top positive -->
+<!-- file:///Users/ghome/gsea_home/output/apr02/gene_analysis.GseaPreranked.1585886479094/gsea_report_for_na_neg_1585886479094.html -->
+<!-- top negative -->
+
+#### Download Geneset 
+
+Download the "Human_GOBP_AllPathways_no_GO_iea_February_01_2020_symbol.gmt" from 
+bader lab link: "http://download.baderlab.org/EM_Genesets/current_release/Human/symbol/"
+
+#### GSEA parameters
+
+*Required field*
++ Gene sets database:Human_GOBP_AllPathways_no_GO_iea_February_01_2020_symbol.gmt
++ Number of permutations:1000
++ collapse/Remap to gene symbols:No_Collapse
+
+*Basic fields*
++ Enrichment statistic: weighted
++ Max size: 200
++ Min size: 15
+
+
+#### GSEA Result
+
+*Enrichment in phenotype: na*
++ 2310 / 3211 gene sets are upregulated in phenotype na_pos
++ 1158 gene sets are significant at FDR < 25%
++ 522 gene sets are significantly enriched at nominal pvalue < 1%
++ 855 gene sets are significantly enriched at nominal pvalue < 5%
+
+
+
+*Enrichment in phenotype: na*
+
++ 901 / 3211 gene sets are upregulated in phenotype na_neg
++ 566 gene sets are significantly enriched at FDR < 25%
++ 399 gene sets are significantly enriched at nominal pvalue < 1%
++ 487 gene sets are significantly enriched at nominal pvalue < 5%
+
+![](A3_pics/top_pos.png)
+
+The top hit for upregulated gene is IMMUNOREGULATORY INTERACTIONS BETWEEN A LYMPHOID AND A NON-LYMPHOID CELL%REACTOME%R-HSA-198933.5
+
+ES = 0.68
+NES = 3.38
+FDR q-val= 0.000
+size = 74 genes
+
+![](A3_pics/gene_up.png)
+
+
+![](A3_pics/top_neg.png)
+
+
+The top hit for downregulated gene is TRANSLATION%REACTOME DATABASE ID RELEASE 71%72766
+
+ES = -0.62
+NES = -4.55
+FDR q-val = 0.000
+size = 129 genes
+
+
+
+
+#### Compare to the previous result from g-profile
+
+
+
+#### Create Enrichment map to visulize GSEA result
+![](A3_pics/gene_analysis.GseaPreranked.png)
+
+
+
+![](A3_pics/ Summary Network.png)
+
+#### Adding annotation using autoannotate app
+
+![](A3_pics/layout.png)
+The top largest annotated clusters are:
+
++ hh proteasome degradation	
++ decay heterocycle catabolic	
++ electron transport metabolic	
++ mitochondrial translational translation	
++ export nucleus rna	
++ neutrophil migration chemotaxis	
++ secretion regulation protein	
++ cell adhesion activation	
++ ribonucleoprotein biogenesis subunit	
++ migration chemotaxis positive	
++ natural killer immunity	
++ adenylate cyclase coupled	
++ rna processing splicing	
+
+
+![](A3_pics/legend.png)
+
+#### Interpretation
+Do the enrichment results support conclusions or mechanism discussed in the original paper? How do these results differ from the results you got from Assignment #2 thresholded methods?
+
+Yes the enrichment result seems matching with the mechanism discussed in the paper such that the up regulated genes are falls into the categories of "IMMUNOREGULATORY INTERACTIONS BETWEEN A LYMPHOID AND A NON-LYMPHOID CELL"
+
+
